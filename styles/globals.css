@@ -1,0 +1,360 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* =============================================
+   BASE STYLES
+   ============================================= */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* =============================================
+   DARK MODE (DEFAULT)
+   ============================================= */
+.dark body {
+  background-color: #0a0a0f;
+  color: #e8e8f0;
+}
+
+/* =============================================
+   LIGHT MODE
+   ============================================= */
+body {
+  background-color: #f0f0f8;
+  color: #1a1a2e;
+}
+
+/* =============================================
+   SCROLLBAR
+   ============================================= */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #2a2a3e;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d0d0e8;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8b5cf6;
+}
+
+/* =============================================
+   GLOW EFFECTS
+   ============================================= */
+.glow-violet {
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3), 0 0 40px rgba(139, 92, 246, 0.1);
+}
+
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.3), 0 0 40px rgba(34, 211, 238, 0.1);
+}
+
+.glow-green {
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3), 0 0 40px rgba(0, 255, 136, 0.1);
+}
+
+/* =============================================
+   GRID BACKGROUND
+   ============================================= */
+.dark .bg-grid {
+  background-image: 
+    linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* =============================================
+   CARDS & SURFACES
+   ============================================= */
+.dark .glass-card {
+  background: rgba(26, 26, 38, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* =============================================
+   QUIZ OPTION BUTTONS
+   ============================================= */
+.option-btn {
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.option-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.option-btn:hover::before {
+  opacity: 1;
+}
+
+.option-btn.selected {
+  border-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.option-btn.correct {
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.1);
+  animation: correctPulse 0.5s ease;
+}
+
+.option-btn.incorrect {
+  border-color: #ff4444;
+  background: rgba(255, 68, 68, 0.1);
+  animation: shake 0.4s ease;
+}
+
+/* =============================================
+   PROGRESS BAR
+   ============================================= */
+.progress-bar {
+  background: linear-gradient(90deg, #8b5cf6, #22d3ee);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+  transition: width 0.5s ease;
+}
+
+/* =============================================
+   XP BAR
+   ============================================= */
+.xp-bar {
+  background: linear-gradient(90deg, #7c3aed, #8b5cf6, #a78bfa);
+  position: relative;
+  overflow: hidden;
+}
+
+.xp-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  animation: shimmer 2s infinite;
+}
+
+/* =============================================
+   HEATMAP
+   ============================================= */
+.heatmap-cell {
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.3);
+  z-index: 10;
+  position: relative;
+}
+
+.heatmap-cell-0 { background-color: rgba(42, 42, 62, 0.6); }
+.heatmap-cell-1 { background-color: rgba(76, 29, 149, 0.5); }
+.heatmap-cell-2 { background-color: rgba(109, 40, 217, 0.6); }
+.heatmap-cell-3 { background-color: rgba(124, 58, 237, 0.75); }
+.heatmap-cell-4 { background-color: rgba(139, 92, 246, 0.9); }
+.heatmap-cell-5 { background-color: #8b5cf6; box-shadow: 0 0 6px rgba(139, 92, 246, 0.6); }
+
+/* Light mode heatmap */
+.light .heatmap-cell-0 { background-color: #e8e8f5; }
+.light .heatmap-cell-1 { background-color: #c4b5fd; }
+.light .heatmap-cell-2 { background-color: #a78bfa; }
+.light .heatmap-cell-3 { background-color: #8b5cf6; }
+.light .heatmap-cell-4 { background-color: #7c3aed; }
+.light .heatmap-cell-5 { background-color: #6d28d9; }
+
+/* =============================================
+   ANIMATIONS
+   ============================================= */
+@keyframes correctPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes scoreFloat {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-60px) scale(1.5); opacity: 0; }
+}
+
+@keyframes levelUp {
+  0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+  60% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.score-float {
+  animation: scoreFloat 1.2s ease-out forwards;
+}
+
+.level-up {
+  animation: levelUp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* =============================================
+   BADGES
+   ============================================= */
+.badge {
+  background: linear-gradient(135deg, #1a1a26, #22223a);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  transition: all 0.3s ease;
+}
+
+.badge:hover {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+  transform: translateY(-2px);
+}
+
+/* =============================================
+   BUTTONS
+   ============================================= */
+.btn-primary {
+  background: linear-gradient(135deg, #7c3aed, #8b5cf6);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent, rgba(255,255,255,0.1), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+}
+
+.btn-primary:hover::after {
+  transform: translateX(100%);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* =============================================
+   TIMER
+   ============================================= */
+.timer-ring {
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+.timer-ring-progress {
+  transition: stroke-dashoffset 1s linear;
+}
+
+/* =============================================
+   MOBILE SAFE AREA
+   ============================================= */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* =============================================
+   FULL SCREEN QUIZ MODE
+   ============================================= */
+.quiz-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow-y: auto;
+}
+
+/* =============================================
+   DROPDOWN
+   ============================================= */
+.dropdown-enter {
+  animation: scaleIn 0.15s ease-out;
+  transform-origin: top right;
+}
+
+/* =============================================
+   CONFETTI PARTICLE
+   ============================================= */
+.confetti-particle {
+  position: fixed;
+  pointer-events: none;
+  animation: confettiFall linear forwards;
+}
+
+@keyframes confettiFall {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* =============================================
+   NO SELECT ON QUIZ
+   ============================================= */
+.quiz-content {
+  user-select: none;
+  -webkit-user-select: none;
+}
