@@ -8,7 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { calculateLevel, getLevelColor } from '@/lib/supabase';
 import {
   Brain, Home, Upload, User, Trophy, Moon, Sun,
-  LogOut, Settings, ChevronDown, Zap, Menu, X
+  LogOut, Settings, ChevronDown, Zap, Menu, X, Shuffle
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -41,6 +41,7 @@ export default function Navbar() {
 
   const navLinks = [
     { href: '/dashboard', label: 'Home', icon: Home },
+    { href: '/quiz/random', label: 'Random', icon: Shuffle },
     { href: '/upload', label: 'Upload', icon: Upload },
     { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   ];
