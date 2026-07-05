@@ -11,7 +11,7 @@ import StatCard from '@/components/StatCard';
 import {
   Zap, Target, Flame, BookOpen, Play, Plus, ChevronRight,
   Clock, CheckCircle, Upload, Star, Shuffle, Pause,
-  Pencil, Check, X, Loader2
+  ClipboardList, Eye, FolderOpen
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -32,8 +32,19 @@ export default function DashboardPage() {
     async function fetchData() {
       const [setsRes, sessionsRes, pausedRes] = await Promise.all([
         supabase.from('quiz_sets').select('*').eq('user_id', user!.id).order('updated_at', { ascending: false }).limit(6),
-        supabase.from('quiz_sessions').select('*, quiz_sets(title)').eq('user_id', user!.id).eq('completed', true).order('completed_at', { ascending: false }).limit(5),
-        supabase.from('quiz_sessions').select('*, quiz_sets(title)').eq('user_id', user!.id).eq('paused', true).eq('completed', false).order('started_at', { ascending: false }).limit(3),
+        supabase.from('quiz_sessions')
+          .select('*, quiz_sets(title, id)')
+          .eq('user_id', user!.id)
+          .eq('completed', true)
+          .order('completed_at', { ascending: false })
+          .limit(5),
+        supabase.from('quiz_sessions')
+          .select('*, quiz_sets(title)')
+          .eq('user_id', user!.id)
+          .eq('paused', true)
+          .eq('completed', false)
+          .order('started_at', { ascending: false })
+          .limit(3),
       ]);
       if (setsRes.data) setQuizSets(setsRes.data);
       if (sessionsRes.data) setRecentSessions(sessionsRes.data);
@@ -42,11 +53,6 @@ export default function DashboardPage() {
     }
     fetchData();
   }, [user]);
-
-  const handleTopicRename = async (setId: string, newTitle: string) => {
-    await supabase.from('quiz_sets').update({ title: newTitle, updated_at: new Date().toISOString() }).eq('id', setId);
-    setQuizSets(prev => prev.map(s => s.id === setId ? { ...s, title: newTitle } : s));
-  };
 
   if (loading || !user || !profile) {
     return (
@@ -107,34 +113,25 @@ export default function DashboardPage() {
           <ActivityHeatmap />
         </div>
 
-        {/* Quick actions row */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <Link
-            href="/quiz/random"
-            className="glass-card rounded-2xl p-4 flex items-center gap-3 hover:border-violet-500/30 transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-700 to-violet-900 flex items-center justify-center shrink-0">
+        {/* Quick actions */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <Link href="/quiz/random" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all group text-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-700 to-violet-900 flex items-center justify-center">
               <Shuffle className="w-5 h-5 text-violet-200" />
             </div>
-            <div>
-              <p className="font-semibold dark:text-white text-gray-900 text-sm">Random Quiz</p>
-              <p className="dark:text-gray-400 text-gray-500 text-xs">AI-generated questions</p>
-            </div>
-            <ChevronRight className="w-4 h-4 dark:text-gray-500 text-gray-400 ml-auto group-hover:text-violet-400 transition-colors" />
+            <p className="font-semibold dark:text-white text-gray-900 text-xs">Random Quiz</p>
           </Link>
-
-          <Link
-            href="/upload"
-            className="glass-card rounded-2xl p-4 flex items-center gap-3 hover:border-violet-500/30 transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-700 to-cyan-900 flex items-center justify-center shrink-0">
-              <Upload className="w-5 h-5 text-cyan-200" />
+          <Link href="/topics" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all group text-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-700 to-cyan-900 flex items-center justify-center">
+              <FolderOpen className="w-5 h-5 text-cyan-200" />
             </div>
-            <div>
-              <p className="font-semibold dark:text-white text-gray-900 text-sm">Upload Quiz</p>
-              <p className="dark:text-gray-400 text-gray-500 text-xs">Import JSON questions</p>
+            <p className="font-semibold dark:text-white text-gray-900 text-xs">Manage Topics</p>
+          </Link>
+          <Link href="/upload" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all group text-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-700 to-green-900 flex items-center justify-center">
+              <Upload className="w-5 h-5 text-green-200" />
             </div>
-            <ChevronRight className="w-4 h-4 dark:text-gray-500 text-gray-400 ml-auto group-hover:text-cyan-400 transition-colors" />
+            <p className="font-semibold dark:text-white text-gray-900 text-xs">Upload Quiz</p>
           </Link>
         </div>
 
@@ -143,7 +140,7 @@ export default function DashboardPage() {
           <div className="mb-6">
             <h2 className="font-display font-semibold dark:text-white text-gray-900 mb-3 flex items-center gap-2">
               <Pause className="w-4 h-4 text-orange-400" />
-              Paused Quizzes
+              Continue Where You Left Off
             </h2>
             <div className="space-y-2">
               {pausedSessions.map(session => (
@@ -176,9 +173,9 @@ export default function DashboardPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-semibold dark:text-white text-gray-900">My Quiz Sets</h2>
-            <Link href="/upload" className="flex items-center gap-1 text-violet-400 hover:text-violet-300 text-sm font-medium transition-colors">
+            <Link href="/topics" className="flex items-center gap-1 text-violet-400 hover:text-violet-300 text-sm font-medium transition-colors">
               <Plus className="w-4 h-4" />
-              Upload New
+              Manage
             </Link>
           </div>
 
@@ -193,59 +190,79 @@ export default function DashboardPage() {
             </div>
           ) : quizSets.length === 0 ? (
             <div className="glass-card rounded-2xl p-10 text-center">
-              <div className="w-16 h-16 rounded-2xl dark:bg-white/5 bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                <BookOpen className="w-8 h-8 dark:text-gray-500 text-gray-400" />
-              </div>
+              <BookOpen className="w-10 h-10 dark:text-gray-600 text-gray-300 mx-auto mb-3" />
               <p className="dark:text-gray-300 text-gray-700 font-medium mb-1">No quiz sets yet</p>
               <p className="dark:text-gray-500 text-gray-400 text-sm mb-4">Upload a JSON file or try the Random Quiz</p>
-              <div className="flex gap-3 justify-center">
+              <div className="flex gap-3 justify-center flex-wrap">
                 <Link href="/upload" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-sm transition-all">
-                  <Upload className="w-4 h-4" />
-                  Upload Questions
+                  <Upload className="w-4 h-4" /> Upload Questions
                 </Link>
                 <Link href="/quiz/random" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl dark:bg-white/5 bg-gray-100 dark:text-gray-300 text-gray-600 font-medium text-sm transition-all">
-                  <Shuffle className="w-4 h-4" />
-                  Random Quiz
+                  <Shuffle className="w-4 h-4" /> Random Quiz
                 </Link>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {quizSets.map(set => (
-                <QuizSetCard key={set.id} quizSet={set} onRename={handleTopicRename} />
+                <QuizSetCard key={set.id} quizSet={set} />
               ))}
             </div>
           )}
         </div>
 
-        {/* Recent sessions */}
+        {/* Recent sessions with Review button */}
         {recentSessions.length > 0 && (
           <div>
-            <h2 className="font-display font-semibold dark:text-white text-gray-900 mb-3">Recent Sessions</h2>
+            <div className="flex items-center gap-2 mb-3">
+              <ClipboardList className="w-4 h-4 dark:text-gray-400 text-gray-500" />
+              <h2 className="font-display font-semibold dark:text-white text-gray-900">Recent Sessions</h2>
+            </div>
             <div className="space-y-2">
-              {recentSessions.map(session => (
-                <div key={session.id} className="glass-card rounded-xl px-4 py-3 flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                    session.correct_answers / session.total_questions >= 0.7
-                      ? 'bg-green-500/15 text-green-400'
-                      : 'bg-orange-500/15 text-orange-400'
-                  }`}>
-                    <CheckCircle className="w-4 h-4" />
+              {recentSessions.map(session => {
+                const acc = session.total_questions
+                  ? Math.round((session.correct_answers / session.total_questions) * 100)
+                  : 0;
+                return (
+                  <div key={session.id} className="glass-card rounded-xl px-4 py-3 flex items-center gap-3">
+                    {/* Accuracy icon */}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      acc >= 70 ? 'bg-green-500/15 text-green-400'
+                      : acc >= 40 ? 'bg-orange-500/15 text-orange-400'
+                      : 'bg-red-500/15 text-red-400'
+                    }`}>
+                      <CheckCircle className="w-4 h-4" />
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="dark:text-white text-gray-900 text-sm font-medium truncate">
+                        {session.quiz_sets?.title || 'Quiz'}
+                      </p>
+                      <p className="dark:text-gray-400 text-gray-500 text-xs">
+                        {session.correct_answers}/{session.total_questions} correct
+                        · {acc}%
+                        · +{session.xp_earned} XP
+                      </p>
+                    </div>
+
+                    {/* Time */}
+                    <div className="flex items-center gap-1 dark:text-gray-400 text-gray-500 text-xs shrink-0 mr-1">
+                      <Clock className="w-3 h-3" />
+                      {Math.round(session.time_taken / 60)}m
+                    </div>
+
+                    {/* Review button */}
+                    <button
+                      onClick={() => router.push(`/quiz/${session.quiz_set_id}/review`)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg dark:bg-violet-500/10 bg-violet-100 hover:bg-violet-500/20 text-violet-400 text-xs font-medium transition-all shrink-0"
+                    >
+                      <Eye className="w-3 h-3" />
+                      Review
+                    </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="dark:text-white text-gray-900 text-sm font-medium truncate">
-                      {session.quiz_sets?.title || 'Quiz'}
-                    </p>
-                    <p className="dark:text-gray-400 text-gray-500 text-xs">
-                      {session.correct_answers}/{session.total_questions} correct · +{session.xp_earned} XP
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 dark:text-gray-400 text-gray-500 text-xs shrink-0">
-                    <Clock className="w-3 h-3" />
-                    {Math.round(session.time_taken / 60)}m
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -254,91 +271,35 @@ export default function DashboardPage() {
   );
 }
 
-function QuizSetCard({ quizSet, onRename }: { quizSet: QuizSet; onRename: (id: string, title: string) => Promise<void> }) {
+// Clean quiz set card — no inline editing (go to /topics for that)
+function QuizSetCard({ quizSet }: { quizSet: QuizSet }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(quizSet.title);
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!editTitle.trim() || editTitle === quizSet.title) { setEditing(false); return; }
-    setSaving(true);
-    await onRename(quizSet.id, editTitle.trim());
-    setSaving(false);
-    setEditing(false);
-  };
-
-  const handleCancel = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditTitle(quizSet.title);
-    setEditing(false);
-  };
-
   return (
     <div
       className="glass-card rounded-2xl p-5 group hover:border-violet-500/30 transition-all cursor-pointer"
-      onClick={() => !editing && router.push(`/quiz/${quizSet.id}`)}
+      onClick={() => router.push(`/quiz/${quizSet.id}`)}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-700 to-violet-900 flex items-center justify-center shrink-0">
           <BookOpen className="w-5 h-5 text-violet-300" />
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-xs px-2 py-0.5 rounded-full dark:bg-white/5 bg-gray-100 dark:text-gray-400 text-gray-500">
-            {quizSet.category}
-          </span>
-          {!editing && (
-            <button
-              onClick={e => { e.stopPropagation(); setEditing(true); }}
-              className="w-6 h-6 rounded-lg flex items-center justify-center dark:text-gray-500 text-gray-400 hover:text-violet-400 dark:hover:bg-white/5 hover:bg-gray-100 transition-all opacity-0 group-hover:opacity-100"
-              title="Rename topic"
-            >
-              <Pencil className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+        <span className="text-xs px-2 py-0.5 rounded-full dark:bg-white/5 bg-gray-100 dark:text-gray-400 text-gray-500">
+          {quizSet.category}
+        </span>
       </div>
-
-      {editing ? (
-        <div className="mb-3" onClick={e => e.stopPropagation()}>
-          <input
-            autoFocus
-            value={editTitle}
-            onChange={e => setEditTitle(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleSave(e as any); if (e.key === 'Escape') handleCancel(e as any); }}
-            className="w-full px-2 py-1 rounded-lg dark:bg-white/5 bg-gray-100 dark:border-white/10 border-gray-200 border dark:text-white text-gray-900 text-sm focus:outline-none focus:border-violet-500 transition-colors"
-          />
-          <div className="flex gap-1 mt-1.5">
-            <button onClick={handleSave} disabled={saving} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium transition-all disabled:opacity-50">
-              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-              Save
-            </button>
-            <button onClick={handleCancel} className="flex items-center gap-1 px-2 py-1 rounded-lg dark:bg-white/5 bg-gray-100 dark:text-gray-400 text-gray-500 text-xs transition-all">
-              <X className="w-3 h-3" />
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
-        <h3 className="font-display font-semibold dark:text-white text-gray-900 mb-1 line-clamp-2 leading-tight">
-          {quizSet.title}
-        </h3>
-      )}
-
-      {quizSet.description && !editing && (
+      <h3 className="font-display font-semibold dark:text-white text-gray-900 mb-1 line-clamp-2 leading-tight">
+        {quizSet.title}
+      </h3>
+      {quizSet.description && (
         <p className="dark:text-gray-400 text-gray-500 text-xs mb-3 line-clamp-2">{quizSet.description}</p>
       )}
-
       <div className="flex items-center justify-between mt-2">
         <span className="dark:text-gray-400 text-gray-500 text-xs">{quizSet.question_count} questions</span>
-        {!editing && (
-          <button className="flex items-center gap-1 text-violet-400 text-sm font-medium group-hover:gap-2 transition-all">
-            <Play className="w-3.5 h-3.5 fill-current" />
-            Start
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <span className="flex items-center gap-1 text-violet-400 text-sm font-medium group-hover:gap-2 transition-all">
+          <Play className="w-3.5 h-3.5 fill-current" />
+          Start
+          <ChevronRight className="w-3.5 h-3.5" />
+        </span>
       </div>
     </div>
   );
