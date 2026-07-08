@@ -11,17 +11,30 @@ import StatCard from '@/components/StatCard';
 import {
   Zap, Target, Flame, BookOpen, Play, Plus, ChevronRight,
   Clock, CheckCircle, Upload, Star, Shuffle, Pause,
-  ClipboardList, Eye, FolderOpen
+  ClipboardList, Eye, FolderOpen, Archive, ChevronDown,
+  RotateCcw, Trophy, TrendingUp
 } from 'lucide-react';
 import Link from 'next/link';
+import { formatDistanceToNow } from 'date-fns';
+
+// Quiz set enriched with best attempt stats
+interface QuizSetWithStats extends QuizSet {
+  bestAccuracy: number | null;       // null = never attempted
+  lastAttemptedAt: string | null;
+  totalAttempts: number;
+  isFullyAttempted: boolean;         // true = at least one 100%-completion run
+}
 
 export default function DashboardPage() {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
-  const [quizSets, setQuizSets] = useState<QuizSet[]>([]);
+
+  const [activeSets, setActiveSets] = useState<QuizSetWithStats[]>([]);
+  const [completedSets, setCompletedSets] = useState<QuizSetWithStats[]>([]);
   const [recentSessions, setRecentSessions] = useState<any[]>([]);
   const [pausedSessions, setPausedSessions] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [archiveOpen, setArchiveOpen] = useState(false); // collapsed by default
 
   useEffect(() => {
     if (!loading && !user) router.push('/auth/login');
@@ -29,28 +42,101 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
+
     async function fetchData() {
-      const [setsRes, sessionsRes, pausedRes] = await Promise.all([
-        supabase.from('quiz_sets').select('*').eq('user_id', user!.id).order('updated_at', { ascending: false }).limit(6),
-        supabase.from('quiz_sessions')
-          .select('*, quiz_sets(title, id)')
+      // Load quiz sets + sessions + paused in parallel
+      const [setsRes, sessionsRes, pausedRes, recentRes] = await Promise.all([
+        supabase
+          .from('quiz_sets')
+          .select('*')
           .eq('user_id', user!.id)
-          .eq('completed', true)
-          .order('completed_at', { ascending: false })
-          .limit(5),
-        supabase.from('quiz_sessions')
+          .order('updated_at', { ascending: false }),
+
+        // All completed sessions — we aggregate per quiz_set_id client-side
+        supabase
+          .from('quiz_sessions')
+          .select('quiz_set_id, correct_answers, total_questions, completed_at, xp_earned')
+          .eq('user_id', user!.id)
+          .eq('completed', true),
+
+        supabase
+          .from('quiz_sessions')
           .select('*, quiz_sets(title)')
           .eq('user_id', user!.id)
           .eq('paused', true)
           .eq('completed', false)
           .order('started_at', { ascending: false })
           .limit(3),
+
+        supabase
+          .from('quiz_sessions')
+          .select('*, quiz_sets(title, id)')
+          .eq('user_id', user!.id)
+          .eq('completed', true)
+          .order('completed_at', { ascending: false })
+          .limit(5),
       ]);
-      if (setsRes.data) setQuizSets(setsRes.data);
-      if (sessionsRes.data) setRecentSessions(sessionsRes.data);
+
       if (pausedRes.data) setPausedSessions(pausedRes.data);
+      if (recentRes.data) setRecentSessions(recentRes.data);
+
+      const sets: QuizSet[] = setsRes.data || [];
+      const sessions: any[] = sessionsRes.data || [];
+
+      // Build per-set stats map
+      const statsMap = new Map<string, {
+        bestAccuracy: number;
+        lastAttemptedAt: string;
+        totalAttempts: number;
+        hasFullRun: boolean;
+      }>();
+
+      sessions.forEach(s => {
+        const acc = s.total_questions > 0
+          ? Math.round((s.correct_answers / s.total_questions) * 100)
+          : 0;
+        const isFullRun = s.total_questions > 0 &&
+          s.correct_answers !== undefined; // a completed session = full run
+
+        const existing = statsMap.get(s.quiz_set_id);
+        if (!existing) {
+          statsMap.set(s.quiz_set_id, {
+            bestAccuracy: acc,
+            lastAttemptedAt: s.completed_at,
+            totalAttempts: 1,
+            hasFullRun: isFullRun,
+          });
+        } else {
+          statsMap.set(s.quiz_set_id, {
+            bestAccuracy: Math.max(existing.bestAccuracy, acc),
+            lastAttemptedAt: s.completed_at > existing.lastAttemptedAt
+              ? s.completed_at
+              : existing.lastAttemptedAt,
+            totalAttempts: existing.totalAttempts + 1,
+            hasFullRun: existing.hasFullRun || isFullRun,
+          });
+        }
+      });
+
+      // Enrich quiz sets
+      const enriched: QuizSetWithStats[] = sets.map(set => {
+        const stats = statsMap.get(set.id);
+        return {
+          ...set,
+          bestAccuracy: stats ? stats.bestAccuracy : null,
+          lastAttemptedAt: stats ? stats.lastAttemptedAt : null,
+          totalAttempts: stats ? stats.totalAttempts : 0,
+          // "fully attempted" = has at least 1 completed session
+          isFullyAttempted: stats ? stats.hasFullRun : false,
+        };
+      });
+
+      // Split into active (never fully attempted) vs completed (archived)
+      setActiveSets(enriched.filter(s => !s.isFullyAttempted));
+      setCompletedSets(enriched.filter(s => s.isFullyAttempted));
       setLoadingData(false);
     }
+
     fetchData();
   }, [user]);
 
@@ -75,7 +161,7 @@ export default function DashboardPage() {
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 pt-20 pb-24">
 
-        {/* Welcome */}
+        {/* Welcome banner */}
         <div className="glass-card rounded-2xl p-5 mb-6 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-violet-900/20 to-transparent pointer-events-none" />
           <div className="relative z-10 flex items-start justify-between">
@@ -105,7 +191,7 @@ export default function DashboardPage() {
           <StatCard icon={Zap} label="Total XP" value={profile.total_xp} color="text-violet-400" />
           <StatCard icon={Star} label="Level" value={level} sub="Keep grinding!" color="text-yellow-400" />
           <StatCard icon={Target} label="Total Points" value={profile.total_points} color="text-cyan-400" />
-          <StatCard icon={Flame} label="Best Streak" value={`${profile.streak_days}d`} color="text-orange-400" />
+          <StatCard icon={Flame} label="Streak" value={`${profile.streak_days}d`} color="text-orange-400" />
         </div>
 
         {/* Heatmap */}
@@ -115,19 +201,19 @@ export default function DashboardPage() {
 
         {/* Quick actions */}
         <div className="grid grid-cols-3 gap-3 mb-6">
-          <Link href="/quiz/random" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all group text-center">
+          <Link href="/quiz/random" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all text-center">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-700 to-violet-900 flex items-center justify-center">
               <Shuffle className="w-5 h-5 text-violet-200" />
             </div>
             <p className="font-semibold dark:text-white text-gray-900 text-xs">Random Quiz</p>
           </Link>
-          <Link href="/topics" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all group text-center">
+          <Link href="/topics" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all text-center">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-700 to-cyan-900 flex items-center justify-center">
               <FolderOpen className="w-5 h-5 text-cyan-200" />
             </div>
             <p className="font-semibold dark:text-white text-gray-900 text-xs">Manage Topics</p>
           </Link>
-          <Link href="/upload" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all group text-center">
+          <Link href="/upload" className="glass-card rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-violet-500/30 transition-all text-center">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-700 to-green-900 flex items-center justify-center">
               <Upload className="w-5 h-5 text-green-200" />
             </div>
@@ -169,11 +255,21 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Quiz sets */}
+        {/* ── ACTIVE QUIZ SETS ── */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display font-semibold dark:text-white text-gray-900">My Quiz Sets</h2>
-            <Link href="/topics" className="flex items-center gap-1 text-violet-400 hover:text-violet-300 text-sm font-medium transition-colors">
+            <div className="flex items-center gap-2">
+              <h2 className="font-display font-semibold dark:text-white text-gray-900">My Quiz Sets</h2>
+              {activeSets.length > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full dark:bg-white/5 bg-gray-100 dark:text-gray-400 text-gray-500">
+                  {activeSets.length}
+                </span>
+              )}
+            </div>
+            <Link
+              href="/topics"
+              className="flex items-center gap-1 text-violet-400 hover:text-violet-300 text-sm font-medium transition-colors"
+            >
               <Plus className="w-4 h-4" />
               Manage
             </Link>
@@ -182,17 +278,18 @@ export default function DashboardPage() {
           {loadingData ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[1, 2, 3].map(i => (
-                <div key={i} className="glass-card rounded-2xl p-5 animate-pulse">
+                <div key={i} className="glass-card rounded-2xl p-5 animate-pulse h-36">
                   <div className="h-4 dark:bg-white/5 bg-gray-200 rounded w-3/4 mb-2" />
                   <div className="h-3 dark:bg-white/5 bg-gray-200 rounded w-1/2" />
                 </div>
               ))}
             </div>
-          ) : quizSets.length === 0 ? (
+          ) : activeSets.length === 0 && completedSets.length === 0 ? (
+            // No sets at all
             <div className="glass-card rounded-2xl p-10 text-center">
               <BookOpen className="w-10 h-10 dark:text-gray-600 text-gray-300 mx-auto mb-3" />
               <p className="dark:text-gray-300 text-gray-700 font-medium mb-1">No quiz sets yet</p>
-              <p className="dark:text-gray-500 text-gray-400 text-sm mb-4">Upload a JSON file or try the Random Quiz</p>
+              <p className="dark:text-gray-500 text-gray-400 text-sm mb-4">Upload a JSON file or try Random Quiz</p>
               <div className="flex gap-3 justify-center flex-wrap">
                 <Link href="/upload" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-sm transition-all">
                   <Upload className="w-4 h-4" /> Upload Questions
@@ -202,16 +299,95 @@ export default function DashboardPage() {
                 </Link>
               </div>
             </div>
+          ) : activeSets.length === 0 ? (
+            // All sets completed
+            <div className="glass-card rounded-2xl p-6 text-center border border-green-500/20">
+              <div className="text-3xl mb-2">🎉</div>
+              <p className="dark:text-white text-gray-900 font-semibold text-sm mb-1">All quizzes completed!</p>
+              <p className="dark:text-gray-400 text-gray-500 text-xs">
+                Check the Completed section below for revision
+              </p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {quizSets.map(set => (
-                <QuizSetCard key={set.id} quizSet={set} />
+              {activeSets.map(set => (
+                <QuizSetCard key={set.id} set={set} />
               ))}
             </div>
           )}
         </div>
 
-        {/* Recent sessions with Review button */}
+        {/* ── COMPLETED / ARCHIVED ── */}
+        {!loadingData && completedSets.length > 0 && (
+          <div className="mb-6">
+            {/* Collapsible header */}
+            <button
+              onClick={() => setArchiveOpen(o => !o)}
+              className="w-full flex items-center justify-between mb-3 group"
+            >
+              <div className="flex items-center gap-2">
+                <Archive className="w-4 h-4 text-green-400" />
+                <h2 className="font-display font-semibold dark:text-white text-gray-900">
+                  Completed
+                </h2>
+                {/* Count badge */}
+                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/25 text-green-400 font-medium">
+                  {completedSets.length} set{completedSets.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 dark:text-gray-400 text-gray-500 text-xs group-hover:text-violet-400 transition-colors">
+                <span>{archiveOpen ? 'Hide' : 'Show for revision'}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${archiveOpen ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+
+            {/* Collapsed summary strip — always visible */}
+            {!archiveOpen && (
+              <div
+                onClick={() => setArchiveOpen(true)}
+                className="glass-card rounded-2xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:border-green-500/30 transition-all border border-green-500/10"
+              >
+                <div className="flex -space-x-2">
+                  {completedSets.slice(0, 4).map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-7 h-7 rounded-lg bg-gradient-to-br from-green-700 to-green-900 border-2 dark:border-[#0a0a0f] border-white flex items-center justify-center"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5 text-green-300" />
+                    </div>
+                  ))}
+                  {completedSets.length > 4 && (
+                    <div className="w-7 h-7 rounded-lg dark:bg-white/10 bg-gray-200 border-2 dark:border-[#0a0a0f] border-white flex items-center justify-center">
+                      <span className="text-[10px] font-bold dark:text-gray-300 text-gray-600">
+                        +{completedSets.length - 4}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="dark:text-white text-gray-900 text-sm font-medium">
+                    {completedSets.length} completed quiz{completedSets.length !== 1 ? 'zes' : ''}
+                  </p>
+                  <p className="dark:text-gray-400 text-gray-500 text-xs truncate">
+                    {completedSets.map(s => s.title).join(' · ')}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 dark:text-gray-400 text-gray-400 shrink-0" />
+              </div>
+            )}
+
+            {/* Expanded grid */}
+            {archiveOpen && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 animate-slide-up">
+                {completedSets.map(set => (
+                  <CompletedQuizCard key={set.id} set={set} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Recent sessions */}
         {recentSessions.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -225,7 +401,6 @@ export default function DashboardPage() {
                   : 0;
                 return (
                   <div key={session.id} className="glass-card rounded-xl px-4 py-3 flex items-center gap-3">
-                    {/* Accuracy icon */}
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                       acc >= 70 ? 'bg-green-500/15 text-green-400'
                       : acc >= 40 ? 'bg-orange-500/15 text-orange-400'
@@ -233,26 +408,18 @@ export default function DashboardPage() {
                     }`}>
                       <CheckCircle className="w-4 h-4" />
                     </div>
-
-                    {/* Info */}
                     <div className="flex-1 min-w-0">
                       <p className="dark:text-white text-gray-900 text-sm font-medium truncate">
                         {session.quiz_sets?.title || 'Quiz'}
                       </p>
                       <p className="dark:text-gray-400 text-gray-500 text-xs">
-                        {session.correct_answers}/{session.total_questions} correct
-                        · {acc}%
-                        · +{session.xp_earned} XP
+                        {session.correct_answers}/{session.total_questions} correct · {acc}% · +{session.xp_earned} XP
                       </p>
                     </div>
-
-                    {/* Time */}
                     <div className="flex items-center gap-1 dark:text-gray-400 text-gray-500 text-xs shrink-0 mr-1">
                       <Clock className="w-3 h-3" />
                       {Math.round(session.time_taken / 60)}m
                     </div>
-
-                    {/* Review button */}
                     <button
                       onClick={() => router.push(`/quiz/${session.quiz_set_id}/review`)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg dark:bg-violet-500/10 bg-violet-100 hover:bg-violet-500/20 text-violet-400 text-xs font-medium transition-all shrink-0"
@@ -271,35 +438,146 @@ export default function DashboardPage() {
   );
 }
 
-// Clean quiz set card — no inline editing (go to /topics for that)
-function QuizSetCard({ quizSet }: { quizSet: QuizSet }) {
+// ─── ACTIVE QUIZ CARD ────────────────────────────────────────────────────────
+function QuizSetCard({ set }: { set: QuizSetWithStats }) {
   const router = useRouter();
+
   return (
     <div
-      className="glass-card rounded-2xl p-5 group hover:border-violet-500/30 transition-all cursor-pointer"
-      onClick={() => router.push(`/quiz/${quizSet.id}`)}
+      onClick={() => router.push(`/quiz/${set.id}`)}
+      className="glass-card rounded-2xl p-5 group hover:border-violet-500/30 transition-all cursor-pointer flex flex-col"
     >
+      {/* Top row */}
       <div className="flex items-start justify-between mb-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-700 to-violet-900 flex items-center justify-center shrink-0">
           <BookOpen className="w-5 h-5 text-violet-300" />
         </div>
-        <span className="text-xs px-2 py-0.5 rounded-full dark:bg-white/5 bg-gray-100 dark:text-gray-400 text-gray-500">
-          {quizSet.category}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-xs px-2 py-0.5 rounded-full dark:bg-white/5 bg-gray-100 dark:text-gray-400 text-gray-500">
+            {set.category}
+          </span>
+          {/* Attempt badge */}
+          {set.bestAccuracy !== null ? (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              set.bestAccuracy >= 70
+                ? 'bg-green-500/15 text-green-400 border border-green-500/20'
+                : set.bestAccuracy >= 40
+                ? 'bg-orange-500/15 text-orange-400 border border-orange-500/20'
+                : 'bg-red-500/15 text-red-400 border border-red-500/20'
+            }`}>
+              Best {set.bestAccuracy}%
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full dark:bg-white/5 bg-gray-100 dark:text-gray-500 text-gray-400 border dark:border-white/5 border-gray-200">
+              Not tried
+            </span>
+          )}
+        </div>
       </div>
-      <h3 className="font-display font-semibold dark:text-white text-gray-900 mb-1 line-clamp-2 leading-tight">
-        {quizSet.title}
+
+      {/* Title */}
+      <h3 className="font-display font-semibold dark:text-white text-gray-900 mb-1 line-clamp-2 leading-tight flex-1">
+        {set.title}
       </h3>
-      {quizSet.description && (
-        <p className="dark:text-gray-400 text-gray-500 text-xs mb-3 line-clamp-2">{quizSet.description}</p>
-      )}
-      <div className="flex items-center justify-between mt-2">
-        <span className="dark:text-gray-400 text-gray-500 text-xs">{quizSet.question_count} questions</span>
+
+      {/* Meta row */}
+      <div className="flex items-center justify-between mt-auto pt-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="dark:text-gray-400 text-gray-500 text-xs">
+            {set.question_count} questions
+          </span>
+          {set.lastAttemptedAt && (
+            <span className="dark:text-gray-500 text-gray-400 text-[10px]">
+              {formatDistanceToNow(new Date(set.lastAttemptedAt), { addSuffix: true })}
+            </span>
+          )}
+        </div>
         <span className="flex items-center gap-1 text-violet-400 text-sm font-medium group-hover:gap-2 transition-all">
           <Play className="w-3.5 h-3.5 fill-current" />
           Start
           <ChevronRight className="w-3.5 h-3.5" />
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── COMPLETED / ARCHIVED QUIZ CARD ─────────────────────────────────────────
+function CompletedQuizCard({ set }: { set: QuizSetWithStats }) {
+  const router = useRouter();
+
+  const accuracyColor =
+    (set.bestAccuracy ?? 0) >= 70 ? 'text-green-400'
+    : (set.bestAccuracy ?? 0) >= 40 ? 'text-orange-400'
+    : 'text-red-400';
+
+  const accuracyBg =
+    (set.bestAccuracy ?? 0) >= 70 ? 'bg-green-500/10 border-green-500/20'
+    : (set.bestAccuracy ?? 0) >= 40 ? 'bg-orange-500/10 border-orange-500/20'
+    : 'bg-red-500/10 border-red-500/20';
+
+  return (
+    <div className="glass-card rounded-2xl p-4 border border-green-500/15 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        {/* Completed icon */}
+        <div className="w-9 h-9 rounded-xl bg-green-500/15 border border-green-500/20 flex items-center justify-center shrink-0">
+          <Trophy className="w-4 h-4 text-green-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-display font-semibold dark:text-white text-gray-900 text-sm line-clamp-2 leading-tight">
+            {set.title}
+          </h3>
+          <p className="dark:text-gray-400 text-gray-500 text-[11px] mt-0.5">
+            {set.category} · {set.question_count} questions
+          </p>
+        </div>
+      </div>
+
+      {/* Stats chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Best accuracy */}
+        <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold ${accuracyBg} ${accuracyColor}`}>
+          <TrendingUp className="w-3 h-3" />
+          Best {set.bestAccuracy}%
+        </div>
+
+        {/* Attempts */}
+        <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg dark:bg-white/5 bg-gray-100 text-xs dark:text-gray-400 text-gray-500">
+          <RotateCcw className="w-3 h-3" />
+          {set.totalAttempts}×
+        </div>
+
+        {/* Completed badge */}
+        <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-medium">
+          <CheckCircle className="w-3 h-3" />
+          Done
+        </div>
+      </div>
+
+      {/* Last attempted */}
+      {set.lastAttemptedAt && (
+        <p className="dark:text-gray-500 text-gray-400 text-[10px] -mt-1">
+          Last attempt {formatDistanceToNow(new Date(set.lastAttemptedAt), { addSuffix: true })}
+        </p>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex gap-2 pt-0.5">
+        <button
+          onClick={() => router.push(`/quiz/${set.id}/review`)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl dark:bg-white/5 bg-gray-100 dark:text-gray-300 text-gray-600 text-xs font-medium transition-all dark:hover:bg-white/10 hover:bg-gray-200"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          Review
+        </button>
+        <button
+          onClick={() => router.push(`/quiz/${set.id}`)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 border border-violet-500/20 text-xs font-semibold transition-all"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Retry
+        </button>
       </div>
     </div>
   );
